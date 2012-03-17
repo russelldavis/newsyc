@@ -9,6 +9,7 @@
 #import "HNKit.h"
 #import "ActivityIndicatorItem.h"
 #import "PlacardButton.h"
+#import "LoginController.h"
 
 #import <MessageUI/MFMailComposeViewController.h>
 
@@ -26,6 +27,7 @@
     int openInSafariIndex;
     int mailLinkIndex;
     int copyLinkIndex;
+    int readLaterIndex;
 }
 
 @property (nonatomic, retain) HNObject *source;
@@ -42,6 +44,5 @@
 - (void)sourceStartedLoading;
 - (void)sourceFinishedLoading;
 - (void)sourceFailedLoading;
-- (void)addActions:(UIActionSheet *)sheet;
 
 @end

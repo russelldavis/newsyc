@@ -6,13 +6,14 @@
 //  Copyright 2011 Xuzz Productions, LLC. All rights reserved.
 //
 
+#import "LoadingController.h"
+
 #import "HNKit.h"
 
-#import "UIActionSheet+Context.h"
-#import "ProgressHUD.h"
-
-#import "LoadingController.h"
+#import "InstapaperController.h"
 #import "LoadingIndicatorView.h"
+#import "ProgressHUD.h"
+#import "UIActionSheet+Context.h"
 
 @implementation LoadingController
 @synthesize source;
@@ -152,12 +153,6 @@
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(appRelaunched:) name:UIApplicationDidBecomeActiveNotification object:nil];
 }
 
-- (void)addActions:(UIActionSheet *)sheet {
-    openInSafariIndex = [sheet addButtonWithTitle:@"Open in Safari"];
-    mailLinkIndex = [MFMailComposeViewController canSendMail] ? [sheet addButtonWithTitle:@"Mail Link"] : -1;
-    copyLinkIndex = [sheet addButtonWithTitle:@"Copy Link"];
-}
-
 - (void)actionSheet:(UIActionSheet *)sheet clickedButtonAtIndex:(NSInteger)index {
     if ([[sheet sheetContext] isEqual:@"link"]) {
         if (index == [sheet cancelButtonIndex]) return;
@@ -185,6 +180,8 @@
             [hud showInWindow:[self.view window]];
             [hud dismissAfterDelay:0.8f animated:YES];
             [hud release];
+        } else if (index == readLaterIndex) {
+            [[InstapaperController sharedInstance] submitURL:[source URL] fromController:self];
         }
     }
 }
@@ -202,7 +199,11 @@
         otherButtonTitles:nil
     ];
 
-    [self addActions:sheet];
+    openInSafariIndex = [sheet addButtonWithTitle:@"Open in Safari"];
+    mailLinkIndex = [MFMailComposeViewController canSendMail] ? [sheet addButtonWithTitle:@"Mail Link"] : -1;
+    readLaterIndex = [sheet addButtonWithTitle:@"Read Later"];
+    copyLinkIndex = [sheet addButtonWithTitle:@"Copy Link"];
+    
     [sheet addButtonWithTitle:@"Cancel"];
     [sheet setCancelButtonIndex:([sheet numberOfButtons] - 1)];
     

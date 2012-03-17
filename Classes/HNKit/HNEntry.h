@@ -6,10 +6,15 @@
 //  Copyright 2011 Xuzz Productions, LLC. All rights reserved.
 //
 
-#import "HNObject.h"
+#import "HNShared.h"
+#import "HNContainer.h"
+
+#ifdef HNKIT_RENDERING_ENABLED
+@class HNEntryBodyRenderer;
+#endif
 
 @class HNUser;
-@interface HNEntry : HNObject {
+@interface HNEntry : HNContainer {
     int points;
     int children;
     HNUser *submitter;
@@ -17,9 +22,11 @@
     NSString *posted;
     HNEntry *parent;
     HNEntry *submission;
-    NSMutableArray *entries;
     NSURL *destination;
     NSString *title;
+#ifdef HNKIT_RENDERING_ENABLED
+    HNEntryBodyRenderer *renderer;
+#endif
 }
 
 @property (nonatomic, assign) int points;
@@ -29,12 +36,13 @@
 @property (nonatomic, retain) NSString *posted;
 @property (nonatomic, retain) HNEntry *parent;
 @property (nonatomic, retain) HNEntry *submission;
-@property (nonatomic, retain) NSArray *entries;
 @property (nonatomic, copy) NSURL *destination;
 @property (nonatomic, copy) NSString *title;
+#ifdef HNKIT_RENDERING_ENABLED
+@property (nonatomic, readonly) HNEntryBodyRenderer *renderer;
+#endif
 
-- (void)loadFromDictionary:(NSDictionary *)response;
-- (void)loadFromDictionary:(NSDictionary *)response withSubmission:(HNEntry *)submission_;
+- (void)loadFromDictionary:(NSDictionary *)response entries:(NSArray **)outEntries withSubmission:(HNEntry *)submission_;
 
 - (BOOL)isComment;
 - (BOOL)isSubmission;

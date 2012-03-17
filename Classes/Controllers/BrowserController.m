@@ -7,8 +7,10 @@
 //
 
 #import "BrowserController.h"
-#import "InstapaperAPI.h"
+
+#import "InstapaperController.h"
 #import "NavigationController.h"
+
 #import "ProgressHUD.h"
 #import "NSArray+Strings.h"
 #import "UIApplication+ActivityIndicator.h"
@@ -26,13 +28,27 @@
     return self;
 }
 
-- (void)dealloc {
+- (void)retainNetworkIndicator {
+    [[UIApplication sharedApplication] retainNetworkActivityIndicator];
+    networkRetainCount += 1;
+}
+
+- (void)releaseNetworkIndicator {
+    [[UIApplication sharedApplication] releaseNetworkActivityIndicator];
+    networkRetainCount -= 1;
+}
+
+- (void)releaseNetworkIndicatorCompletely {
     // there may be multiple connections open on the webview, so we have
     // to keep track of how many are open ourselves and release the indicator
     // that many times to make sure it is properly hidden when we are popped
     for (int i = 0; i < networkRetainCount; i++) {
         [[UIApplication sharedApplication] releaseNetworkActivityIndicator];
     }
+}
+
+- (void)dealloc {
+    [self releaseNetworkIndicatorCompletely];
     
     [webview setDelegate:nil];
     [webview release];
@@ -117,12 +133,7 @@
 - (void)viewDidUnload {
     [super viewDidUnload];
     
-    // there may be multiple connections open on the webview, so we have
-    // to keep track of how many are open ourselves and release the indicator
-    // that many times to make sure it is properly hidden when we are popped
-    for (int i = 0; i < networkRetainCount; i++) {
-        [[UIApplication sharedApplication] releaseNetworkActivityIndicator];
-    }
+    [self releaseNetworkIndicatorCompletely];
     
     [webview setDelegate:nil];
     [webview release];
@@ -153,47 +164,8 @@
     spacerItem = nil;
 }
 
-- (void)submitInstapaperRequest {
-    InstapaperRequest *request = [[InstapaperRequest alloc] initWithSession:[InstapaperSession currentSession]];
-        
-    ProgressHUD *hud = [[ProgressHUD alloc] init];
-    [hud setText:@"Saving"];
-    [hud showInWindow:[[self view] window]];
-    [hud release];
-    
-    __block id succeededObserver = nil;
-    [[NSNotificationCenter defaultCenter] addObserverForName:kInstapaperRequestSucceededNotification object:request queue:nil usingBlock:^(NSNotification *notification) {
-        [hud setText:@"Saved!"];
-        [hud setState:kProgressHUDStateCompleted];
-        [hud dismissAfterDelay:0.8f animated:YES];
-        
-        [[NSNotificationCenter defaultCenter] removeObserver:succeededObserver];
-    }];
-    
-    __block id failedObserver = nil;
-    failedObserver = [[NSNotificationCenter defaultCenter] addObserverForName:kInstapaperRequestFailedNotification object:request queue:nil usingBlock:^(NSNotification *notification) {
-        [hud setText:@"Error Saving"];
-        [hud setState:kProgressHUDStateError];
-        [hud dismissAfterDelay:0.8f animated:YES];
-        
-        [[NSNotificationCenter defaultCenter] removeObserver:failedObserver];
-    }];
-    
-    [request addItemWithURL:currentURL];
-    [request autorelease];
-}
-
 - (void)readability {
     [webview stringByEvaluatingJavaScriptFromString:kReadabilityBookmarkletCode];
-}
-
-- (void)loginControllerDidLogin:(LoginController *)controller {
-    [controller dismissModalViewControllerAnimated:YES];
-    [self submitInstapaperRequest];
-}
-
-- (void)loginControllerDidCancel:(LoginController *)controller {
-    [controller dismissModalViewControllerAnimated:YES];
 }
 
 - (void)mailComposeController:(MFMailComposeViewController *)controller didFinishWithResult:(MFMailComposeResult)result error:(NSError *)error {
@@ -226,15 +198,7 @@
         [copied dismissAfterDelay:0.8f animated:YES];
         [copied release];
     } else if (([MFMailComposeViewController canSendMail] && buttonIndex == 3) || (![MFMailComposeViewController canSendMail] && buttonIndex == 2)) {
-        if ([InstapaperSession currentSession] != nil) {
-            [self submitInstapaperRequest];
-        } else {
-            NavigationController *navigation = [[NavigationController alloc] init];
-            InstapaperLoginController *login = [[InstapaperLoginController alloc] init];
-            [login setDelegate:self];
-            [navigation setViewControllers:[NSArray arrayWithObject:login]];
-            [self presentModalViewController:[navigation autorelease] animated:YES];
-        }
+        [[InstapaperController sharedInstance] submitURL:currentURL fromController:self];
     } 
 }
 
@@ -279,8 +243,7 @@
 - (void)webView:(UIWebView *)webView didFailLoadWithError:(NSError *)error {
     [self updateToolbarItems];
     
-    networkRetainCount -= 1;
-    [[UIApplication sharedApplication] releaseNetworkActivityIndicator];
+    [self releaseNetworkIndicator];
 }
 
 - (void)webViewDidFinishLoad:(UIWebView *)webView {
@@ -288,18 +251,16 @@
     [self setCurrentURL:[[webView request] URL]];
     [[self navigationItem] setTitle:[webview stringByEvaluatingJavaScriptFromString:@"document.title"]];
     
-    networkRetainCount -= 1;
-    [[UIApplication sharedApplication] releaseNetworkActivityIndicator];
+    [self releaseNetworkIndicator];
 }
 
 - (void)webViewDidStartLoad:(UIWebView *)webView {
-    networkRetainCount += 1;
-    [[UIApplication sharedApplication] retainNetworkActivityIndicator];
+    [self retainNetworkIndicator];
     
     [self updateToolbarItems];
 }
 
-//These 3 methods from Apple tech doc: http://developer.apple.com/library/ios/#qa/qa1629/_index.html
+// These 3 methods from Apple tech doc: http://developer.apple.com/library/ios/#qa/qa1629/_index.html
 - (void)openExternalURL:(NSURL *)external {
     externalURL = [external retain];
     
@@ -315,6 +276,7 @@
 - (void)connectionDidFinishLoading:(NSURLConnection *)connection {
     UIAlertView *alert = [[UIAlertView alloc] initWithTitle:@"Opening Link" message:@"Are you sure you want to leave news:yc to open this link?" delegate:self cancelButtonTitle:@"Cancel" otherButtonTitles:@"Open Link", nil];
     [alert show];
+    [alert release];
 }
 
 - (void)alertView:(UIAlertView *)alertView clickedButtonAtIndex:(NSInteger)buttonIndex {
@@ -326,7 +288,7 @@
     externalURL = nil;
 }
 
-- (void) alertView:(UIAlertView *)alertView didDismissWithButtonIndex:(NSInteger)buttonIndex {
+- (void)alertView:(UIAlertView *)alertView didDismissWithButtonIndex:(NSInteger)buttonIndex {
     [alertView release];
 }
 
@@ -335,10 +297,11 @@
     
     NSArray *hosts = [NSArray arrayWithObjects:@"itunes.apple.com", @"phobos.apple.com", @"youtube.com", @"maps.google.com", nil];
     NSURL *url = [request URL];
-    if(navigationType == UIWebViewNavigationTypeLinkClicked && [hosts containsString:[url host]]) {
+    if (navigationType == UIWebViewNavigationTypeLinkClicked && [hosts containsString:[url host]]) {
         [self openExternalURL:url];
         return NO;
     }
+    
     if (navigationType == UIWebViewNavigationTypeLinkClicked ||
         navigationType == UIWebViewNavigationTypeFormSubmitted ||
         navigationType == UIWebViewNavigationTypeFormResubmitted) {
